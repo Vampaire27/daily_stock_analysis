@@ -43,62 +43,108 @@ python scripts/check_ai_assets.py
 - 项目定位：股票智能分析系统，覆盖 A 股、港股、美股。
 - 主流程：抓取数据 -> 技术分析/新闻检索 -> LLM 分析 -> 生成报告 -> 通知推送。
 - 关键入口：
-  - `main.py`：分析任务主入口
-  - `server.py`：FastAPI 服务入口
-  - `apps/dsa-web/`：Web 前端
-  - `apps/dsa-desktop/`：Electron 桌面端
-  - `.github/workflows/`：CI、发布、每日任务
+  - `main.py`：分析任务主入口（argparse 多模式：单次分析 / 定时调度 / Web 服务 / 大盘复盘 / 回测）
+  - `server.py`：FastAPI 服务入口（等价于 `main.py --serve-only`）
+  - `apps/dsa-web/`：React 19 + Vite 7 前端 SPA
+  - `apps/dsa-desktop/`：Electron 31 桌面端（内嵌 PyInstaller 打包的 Python 后端）
 - 核心职责：
-  - `src/core/`：主流程编排
-  - `src/services/`：业务服务层
-  - `src/repositories/`：数据访问层
-  - `src/reports/`：报告生成
-  - `src/schemas/`：Schema / 数据结构
-  - `data_provider/`：多数据源适配与 fallback
-  - `api/`：FastAPI API
-  - `bot/`：机器人接入
-  - `scripts/`：本地脚本
-  - `.github/scripts/`：GitHub 自动化脚本
-  - `tests/`：pytest 测试
-  - `docs/`：文档与说明
+  - `src/core/pipeline.py`：**StockAnalysisPipeline**，端到端主编排器
+  - `src/core/market_review.py`：大盘复盘（A 股 / 美股 / 双市场）
+  - `src/config.py`：**Config 单例**（`@dataclass`，从 `.env` 加载，支持热重载）
+  - `src/analyzer.py`：LLM 分析层（通过 LiteLLM 统一网关对接多模型）
+  - `src/stock_analyzer.py`：技术分析（均线、趋势、乖离率、筹码分布）
+  - `src/search_service.py`：多引擎新闻搜索（7+ 后端，多 key 轮转）
+  - `src/notification.py` + `src/notification_sender.py`：12+ 通知渠道并行分发
+  - `src/storage.py`：SQLAlchemy ORM over SQLite（WAL 模式）
+  - `src/services/`：业务服务层（任务队列、报告渲染、组合管理、回测等）
+  - `src/repositories/`：数据访问层（Repository 模式）
+  - `src/schemas/`：Pydantic / dataclass 数据结构
+  - `src/agent/`：Agent 系统（ReAct 循环 + 工具调用 + 多 Agent 编排）
+  - `data_provider/`：**多数据源适配**（Strategy 模式，按优先级自动 fallback）
+  - `api/`：FastAPI API 层（`/api/v1/` 下 auth/analysis/history/stocks/agent/backtest/portfolio/system 等端点）
+  - `bot/`：机器人接入（DingTalk、Feishu、Discord）
+  - `strategies/`：11 个 YAML 策略定义（bull_trend、ma_golden_cross、chan_theory 等）
+  - `tests/`：pytest 测试（111 文件，标记分离：`not network` 离线 / `network` 在线）
+
+### 技术栈
+
+- **后端**：Python 3.11, FastAPI, LiteLLM, SQLAlchemy (SQLite), schedule, tenacity, exchange-calendars, Jinja2
+- **数据源**（按优先级）：efinance → akshare → tushare → pytdx → baostock → yfinance → longbridge（TickFlow 按需懒加载，需 `TICKFLOW_API_KEY`）
+- **前端**：React 19, TypeScript 5.9, Vite 7, Tailwind CSS 4, Zustand（状态管理）, Recharts, React Router 7
+- **桌面端**：Electron 31 + electron-builder
+- **部署**：Docker 多阶段构建（node:20 构建前端 + python:3.11 运行后端）
+
+### 核心架构模式
+
+1. **Pipeline 编排**（`src/core/pipeline.py`）：交易日判断 → 数据抓取 → 技术分析 → 新闻搜索 → LLM 分析 → 存储 → 报告 → 通知。支持断点续传（已分析的股票自动跳过）。
+2. **数据源 Strategy + Fallback**（`data_provider/base.py`）：`DataFetcherManager` 维护按优先级排序的 fetcher 列表，逐个尝试直到成功。每个 fetcher 标准化输出列：`date, open, high, low, close, volume, amount, pct_chg`。新增数据源只需实现 `BaseFetcher` 并注册。
+3. **Fail-open 语义**：所有外部依赖（数据源、搜索引擎、通知渠道、基本面数据）单点失败不拖垮主流程，自动降级。
+4. **Config 单例 + 热重载**（`src/config.py`）：`get_config()` 返回单例 `Config` dataclass。定时调度模式下每次运行前调用 `_reload_runtime_config()` 重读 `.env`。`ConfigManager`（`src/core/config_manager.py`）支持 WebUI 运行时读写。
+5. **LLM 多通道**：`LLM_CHANNELS=primary,backup`，每个通道独立配置 `LLM_<NAME>_*` 环境变量，自动切换。
+6. **API SPA 托管**：前端构建产物输出到项目根 `static/`，FastAPI 通过静态文件 + SPA fallback 路由托管。
+7. **Agent 系统**（`src/agent/`）：ReAct executor + 工具注册表（data/search/analysis/market/backtest tools）+ skill 路由 + 多 Agent 编排（技术→情报→风控→专家→决策）。
 
 ## 4. 常用命令
 
 ### 运行应用
 
 ```bash
-python main.py
-python main.py --debug
-python main.py --dry-run
-python main.py --stocks 600519,hk00700,AAPL
-python main.py --market-review
-python main.py --schedule
-python main.py --serve
-python main.py --serve-only
-uvicorn server:app --reload --host 0.0.0.0 --port 8000
+python main.py                                    # 单次分析，使用 .env 中 STOCK_LIST
+python main.py --stocks 600519,hk00700,AAPL       # 指定股票
+python main.py --dry-run                           # 只抓数据，不调 LLM
+python main.py --market-review                     # 仅大盘复盘
+python main.py --schedule                          # 定时调度模式（默认 18:00 Beijing）
+python main.py --serve                             # API 服务 + 分析任务
+python main.py --serve-only                        # 仅 API 服务
+python main.py --force-run                         # 跳过交易日检查
+python main.py --debug                             # 调试日志级别
+uvicorn server:app --reload --host 0.0.0.0 --port 8000  # 开发热重载
 ```
 
 ### 后端验证
 
 ```bash
-pip install -r requirements.txt
-pip install flake8 pytest
-./scripts/ci_gate.sh
-python -m pytest -m "not network"
-python -m py_compile <changed_python_files>
+./scripts/ci_gate.sh                               # CI 完整门控（syntax + flake8 + deterministic + offline pytest）
+python -m pytest -m "not network"                  # 离线测试（CI 默认）
+python -m pytest -m network                        # 在线测试（需 API key，观测项）
+python -m pytest tests/test_config.py -v           # 运行单个测试文件
+python -m pytest tests/test_config.py::TestConfig::test_xxx -v  # 运行单个测试方法
+python -m pytest -k "keyword" -m "not network"     # 按关键字过滤测试
+python -m py_compile src/config.py                 # 语法检查单文件（最低验证）
+bash test.sh quick                                 # 集成冒烟（代码识别 + yfinance + 市场识别）
+bash test.sh a-stock                               # A 股个股测试
+bash test.sh us-stock                              # 美股测试
+bash test.sh market                                # 大盘复盘测试
 ```
 
-### Web / Desktop
+> **代码格式**：`black` 与 `flake8` 均使用 `line-length=120`（见 `pyproject.toml` / `setup.cfg`）。`isort` profile 为 `black`。
+
+### Web 前端开发
 
 ```bash
 cd apps/dsa-web
-npm ci
-npm run lint
-npm run build
+npm ci                                             # 安装依赖
+npm run dev                                        # 开发服务器（Vite，代理 /api → localhost:8000）
+npm run lint                                       # ESLint 检查
+npm run build                                      # 生产构建（输出到 ../../static/）
+npm run test                                       # Vitest 单测
+npm run test:smoke                                 # Playwright E2E 测试
+```
 
-cd ../dsa-desktop
+### Desktop
+
+```bash
+cd apps/dsa-desktop
 npm install
-npm run build
+npm run build                                      # 需先构建 Web 前端
+```
+
+### Docker
+
+```bash
+docker-compose -f docker/docker-compose.yml up -d             # 定时模式（默认）
+docker-compose -f docker/docker-compose.yml up -d server      # 仅 FastAPI 服务
+docker-compose -f docker/docker-compose.yml up -d analyzer server  # 同时启动
 ```
 
 ### PR / CI 证据
@@ -107,6 +153,12 @@ npm run build
 gh pr view <pr_number>
 gh pr checks <pr_number>
 gh run view <run_id> --log-failed
+```
+
+### AI 协作资产校验
+
+```bash
+python scripts/check_ai_assets.py                 # 校验 AGENTS.md/CLAUDE.md/skills 关系
 ```
 
 ## 5. 默认工作流
