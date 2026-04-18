@@ -1,0 +1,20 @@
+[
+  {
+    "question_index": 0,
+    "answer": "generate_index_from_csv.py handles US stock deduplication via the `get_us_delist_priority()` function. It assigns a priority score of 2 to records with an empty delist_date (indicating currently active stocks), priority 1 to records with 'NaT' delist_date, and priority 0 to records with actual delist dates. For each ts_code, the script keeps the row with the highest priority. On a tie, it keeps the first occurrence as it appeared in the CSV file.",
+    "confidence": "high",
+    "source": "Section 4.2 Error Handling Summary table, row for generate_index_from_csv.py"
+  },
+  {
+    "question_index": 1,
+    "answer": "build_canonical_code(code) determines the market suffix for 6-digit Chinese stock codes using these prefix rules: '6xxxx' or '900xxx' maps to .SH (Shanghai main board/STAR/B-shares); '0xxxx', '2xxxx', or '3xxxx' maps to .SZ (Shenzhen main board/ChiNext/B-shares); '920xxx', '43xx', '83xx', '87xx', '88xx', '81xx', or '82xx' maps to .BJ (Beijing Stock Exchange).",
+    "confidence": "high",
+    "source": "Section 5 Common Modification Scenarios, Scenario 3 (lines 376-379)"
+  },
+  {
+    "question_index": 2,
+    "answer": "save_recommendation.py accepts two required arguments: --code and --name. It also accepts optional arguments: --score, --price, --sector, --trend, --advice, --confidence, --support, --resistance, --stop-loss, --take-profit, --buy-range, --position, --short-outlook, --risk, --reason-json, --reason-text, and --review-lessons. The script appends records with auto-incremented IDs to data/recommendations_history.json.",
+    "confidence": "high",
+    "source": "Section 4.1 Script Invocation Patterns, Recommendation Lifecycle flow diagram"
+  }
+]

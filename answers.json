@@ -1,0 +1,14 @@
+[
+  {
+    "question_index": 0,
+    "answer": "Three strategies reference the most core rules with 4 each: chan_theory [1,2,3,4], emotion_cycle [1,2,3,5], and wave_theory [1,2,3,4]. Five strategies reference 3 rules each: bull_trend, box_oscillation, shrink_pullback, ma_golden_cross, volume_breakout. Three strategies reference 2 rules each: dragon_head, one_yang_three_yin, bottom_volume. Notably, bottom_volume has the lowest rule coverage at 2 rules.",
+    "confidence": "high",
+    "source": "SKILL.md, Section 2.5 'Core Trading Principles Reference', lines 97-100: explicit table of core_rules coverage per strategy"
+  },
+  {
+    "question_index": 1,
+    "answer": "In required_tools: dragon_head and emotion_cycle. Mentioned only in instructions (not in required_tools): shrink_pullback and volume_breakout.",
+    "confidence": "high",
+    "source": "SKILL.md, Section 2.5, line 102: 'Strategies using search_stock_news in required_tools: Only dragon_head and emotion_cycle include search_stock_news in their required_tools list. Two additional strategies (shrink_pullback and volume_breakout) reference news checking in their instructions but do not list it in required_tools.'"
+  }
+]
